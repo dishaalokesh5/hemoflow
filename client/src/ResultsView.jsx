@@ -1,10 +1,23 @@
 export default function ResultsView({ data, onReset }) {
   const { userContext, systemScores, flags, geminiAnalysis } = data;
 
-  const getScoreInfo = (score) => {
-    if (score >= 80) return { colorClass: 'text-status-pass', label: 'Optimal' };
-    if (score >= 60) return { colorClass: 'text-status-warn', label: 'Borderline' };
-    return { colorClass: 'text-status-fail', label: 'Needs Attention' };
+  const getScoreInfo = (val) => {
+    let score = val;
+    let status = 'SCORED';
+
+    if (typeof val === 'object' && val !== null) {
+      score = val.score;
+      status = val.status;
+    }
+
+    if (status === 'NOT_TESTED' || score === null || score === undefined) {
+      return { isNotTested: true, scoreDisplay: 'Not Tested', colorClass: 'text-muted-warm', label: '' };
+    }
+
+    const numScore = Number(score);
+    if (numScore >= 80) return { isNotTested: false, scoreDisplay: `${numScore}/100`, colorClass: 'text-status-pass', label: 'Optimal' };
+    if (numScore >= 60) return { isNotTested: false, scoreDisplay: `${numScore}/100`, colorClass: 'text-status-warn', label: 'Borderline' };
+    return { isNotTested: false, scoreDisplay: `${numScore}/100`, colorClass: 'text-status-fail', label: 'Needs Attention' };
   };
 
   const getStatusColor = (status) => {
@@ -38,20 +51,28 @@ export default function ResultsView({ data, onReset }) {
           </h3>
         </div>
         <div className="row g-3">
-          {Object.entries(systemScores || {}).map(([system, score]) => {
-            const { colorClass, label } = getScoreInfo(score);
+          {Object.entries(systemScores || {}).map(([system, val]) => {
+            const { isNotTested, scoreDisplay, colorClass, label } = getScoreInfo(val);
             return (
               <div key={system} className="col-6 col-md-3">
                 <div className="p-3 rounded-2 border text-center h-100 d-flex flex-column justify-content-between" style={{ backgroundColor: '#FFFFFF', borderColor: '#E8E6E1' }}>
                   <div className="text-muted-warm small fw-medium text-capitalize mb-2">
                     {system.replace('_', ' ')}
                   </div>
-                  <div className={`display-6 num-tabular mb-1 ${colorClass}`}>
-                    {score}<span className="fs-6 text-muted-warm font-monospace">/100</span>
-                  </div>
-                  <div className={`status-label ${colorClass}`}>
-                    {label}
-                  </div>
+                  {isNotTested ? (
+                    <div className="my-auto text-muted-warm font-medium" style={{ fontSize: '1.05rem', padding: '0.5rem 0' }}>
+                      Not Tested
+                    </div>
+                  ) : (
+                    <>
+                      <div className={`display-6 num-tabular mb-1 ${colorClass}`}>
+                        {scoreDisplay}
+                      </div>
+                      <div className={`status-label ${colorClass}`}>
+                        {label}
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             );

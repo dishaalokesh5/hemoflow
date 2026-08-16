@@ -29,6 +29,15 @@ app.post('/api/analyze', upload.single('pdf'), async (req, res) => {
     const parsedBiomarkers = parseBiomarkers(rawText);
 
     const evaluatedMarkers = parsedBiomarkers.map(bm => {
+      if (typeof bm.value === 'string') {
+        return {
+          ...bm,
+          range: { low: 'N/A', high: 'N/A' },
+          status: 'PASS',
+          deviationPct: 0
+        };
+      }
+
       const hasExtractedRange = (bm.referenceLow !== null && bm.referenceLow !== undefined && bm.referenceHigh !== null && bm.referenceHigh !== undefined);
       const range = hasExtractedRange ? { low: bm.referenceLow, high: bm.referenceHigh } : null;
 

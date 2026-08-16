@@ -11,13 +11,24 @@ export function evaluateMarker(value, low, high) {
 }
 
 export function scoreSystem(markerKeys, results) {
+  const getMarker = (k) => Array.isArray(results) ? results.find(r => r.name === k) : results[k];
+
+  const testedMarkers = markerKeys.filter(k => {
+    const item = getMarker(k);
+    return item && item.value !== null && item.value !== undefined;
+  });
+
+  if (testedMarkers.length === 0) {
+    return { score: null, status: "NOT_TESTED" };
+  }
+
   let score = 100;
-  for (const key of markerKeys) {
-    const item = results.find(r => r.name === key);
+  for (const m of testedMarkers) {
+    const item = getMarker(m);
     if (item && item.status !== "PASS") {
-      const absDev = Math.abs(item.deviationPct);
-      score -= absDev <= 15 ? 10 : 25;
+      const dev = Math.abs(item.deviationPct || 0);
+      score -= dev <= 15 ? 10 : dev > 15 ? 25 : 0;
     }
   }
-  return Math.max(0, score);
+  return { score: Math.max(score, 0), status: "SCORED" };
 }
