@@ -1,0 +1,112 @@
+:root {
+  --bg-color: #FAFAF8;
+  --text-main: #1A1A1A;
+  --text-muted: #5A5A56;
+  --card-bg: #FFFFFF;
+  --border-color: #E8E6E1;
+  --accent-teal: #1B6E6E;
+  --accent-teal-hover: #145555;
+  --status-pass: #2F7A4C;
+  --status-warn: #B8860B;
+  --status-fail: #C1442E;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  font-family: -apple-system, "Inter", system-ui, sans-serif;
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-main);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.text-muted-warm {
+  color: var(--text-muted) !important;
+}
+
+/* Tabular Numbers */
+.num-tabular {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* Cards & Sections */
+.card-clean {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  box-shadow: none;
+}
+
+.card-header-clean {
+  border-bottom: 1px solid var(--border-color);
+  background: transparent;
+  padding: 1rem 1.25rem;
+}
+
+/* Buttons */
+.btn-teal {
+  background-color: var(--accent-teal);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 6px;
+  padding: 0.65rem 1.25rem;
+  font-weight: 600;
+  transition: background-color 0.15s ease;
+}
+
+.btn-teal:hover:not(:disabled) {
+  background-color: var(--accent-teal-hover);
+  color: #FFFFFF;
+}
+
+.btn-teal:disabled {
+  background-color: #A0C4C4;
+  color: #FFFFFF;
+}
+
+/* Form Controls */
+.form-control-clean, .form-select-clean {
+  background-color: #FAFAF8;
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  border-radius: 6px;
+  padding: 0.65rem 0.85rem;
+}
+
+.form-control-clean:focus, .form-select-clean:focus {
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 3px rgba(27, 110, 110, 0.15);
+  background-color: #FFFFFF;
+  outline: none;
+}
+
+/* Status colors */
+.text-status-pass { color: var(--status-pass) !important; }
+.text-status-warn { color: var(--status-warn) !important; }
+.text-status-fail { color: var(--status-fail) !important; }
+
+/* Table-like flag row layout */
+.flag-table-row {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1.5fr 1fr;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.flag-table-row:last-child {
+  border-bottom: none;
+}
+
+@media (max-width: 576px) {
+  .flag-table-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+}
