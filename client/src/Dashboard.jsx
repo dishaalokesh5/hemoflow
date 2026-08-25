@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { API_BASE } from './apiConfig';
 
 export default function Dashboard({ onSelectReport, onNewAnalysis }) {
   const { token } = useAuth();
@@ -13,7 +14,7 @@ export default function Dashboard({ onSelectReport, onNewAnalysis }) {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch('/api/reports', {
+      const res = await fetch(`${API_BASE}/api/reports`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -33,7 +34,7 @@ export default function Dashboard({ onSelectReport, onNewAnalysis }) {
   const handleView = async (id) => {
     setViewLoadingId(id);
     try {
-      const res = await fetch(`/api/reports/${id}`, {
+      const res = await fetch(`${API_BASE}/api/reports/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
@@ -50,7 +51,7 @@ export default function Dashboard({ onSelectReport, onNewAnalysis }) {
     if (!window.confirm(`Are you sure you want to delete "${filename}"?`)) return;
 
     try {
-      const res = await fetch(`/api/reports/${id}`, {
+      const res = await fetch(`${API_BASE}/api/reports/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });

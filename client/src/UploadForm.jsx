@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from './AuthContext';
+import { API_BASE } from './apiConfig';
 
 export default function UploadForm({ onSuccess }) {
   const { token } = useAuth();
@@ -29,7 +30,7 @@ export default function UploadForm({ onSuccess }) {
       if (token) {
         headers['Authorization'] = `Bearer ${token}`;
       }
-      const res = await fetch('/api/analyze', { method: 'POST', headers, body: formData });
+      const res = await fetch(`${API_BASE}/api/analyze`, { method: 'POST', headers, body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Analysis failed.');
       onSuccess(data);

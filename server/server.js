@@ -22,6 +22,11 @@ runMigrations();
 app.use(cors());
 app.use(express.json());
 
+// Health check endpoint
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'Hemoflow API', timestamp: new Date().toISOString() });
+});
+
 // Auth & Report Routers
 app.use('/api/auth', authRouter);
 app.use('/api/reports', reportsRouter);
