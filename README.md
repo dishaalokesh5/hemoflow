@@ -72,9 +72,6 @@ hemoflow/
 ├── docs/
 │   └── api.md                   # Comprehensive REST API Documentation
 │
-├── scripts/
-│   └── eda_blood_biomarkers.py  # Exploratory Data Analysis & visualization script
-│
 ├── .gitignore                   # Version control ignore rules
 ├── README.md                    # Production documentation
 └── package.json                 # Project configuration
@@ -87,7 +84,6 @@ hemoflow/
 ### Prerequisites
 - **Node.js**: v18.0.0 or higher
 - **npm**: v9.0.0 or higher
-- **Python**: 3.9+ (Optional, for running EDA scripts)
 
 ---
 
@@ -173,19 +169,6 @@ cd server
 npm run test:resilience
 ```
 
----
-
-## 📊 Exploratory Data Analysis (EDA)
-
-An exploratory data science script is provided in `scripts/eda_blood_biomarkers.py` to analyze biomarker distributions, outliers, and cross-correlations across synthetic patient panels.
-
-```bash
-# Install Python dependencies
-pip install pandas numpy matplotlib seaborn
-
-# Run EDA script
-python scripts/eda_blood_biomarkers.py
-```
 
 ---
 
