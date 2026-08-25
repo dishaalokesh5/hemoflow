@@ -44,8 +44,11 @@ router.post('/register', async (req, res) => {
       user: { id: user.id, email: user.email }
     });
   } catch (err) {
-    console.error('Registration error:', err);
-    return res.status(500).json({ error: 'Failed to create user account.' });
+    console.error('Registration error:', err.message || err);
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ error: 'Database not connected. Please create a Postgres DB on Render and set DATABASE_URL.' });
+    }
+    return res.status(500).json({ error: `Registration error: ${err.message || 'Database error'}` });
   }
 });
 
@@ -79,8 +82,11 @@ router.post('/login', async (req, res) => {
       user: { id: user.id, email: user.email }
     });
   } catch (err) {
-    console.error('Login error:', err);
-    return res.status(500).json({ error: 'Authentication failed.' });
+    console.error('Login error:', err.message || err);
+    if (!process.env.DATABASE_URL) {
+      return res.status(500).json({ error: 'Database not connected. Please set DATABASE_URL on Render.' });
+    }
+    return res.status(500).json({ error: `Login error: ${err.message || 'Database error'}` });
   }
 });
 
