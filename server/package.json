@@ -4,7 +4,9 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node tests/test_suite.js",
+    "test:resilience": "node tests/test_db_resilience.js"
   },
   "dependencies": {
     "@google/genai": "latest",

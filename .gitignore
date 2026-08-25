@@ -22,3 +22,14 @@ yarn-error.log*
 # System files
 .DS_Store
 Thumbs.db
+
+# Databases & local storage
+*.db
+*.sqlite
+*.sqlite3
+server/*.db
+
+# Generated EDA charts & output artifacts
+*.png
+scripts/*.png
+

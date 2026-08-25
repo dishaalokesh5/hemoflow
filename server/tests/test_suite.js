@@ -1,8 +1,8 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
-import pool from './db.js';
-import { runMigrations } from './migrate.js';
+import pool from '../db.js';
+import { runMigrations } from '../migrate.js';
 
 // We will run tests against server running on port 5000 (or spawn an instance)
 const BASE_URL = 'http://localhost:5000';
