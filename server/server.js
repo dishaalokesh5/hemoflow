@@ -27,6 +27,20 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Hemoflow API', timestamp: new Date().toISOString() });
 });
 
+// Database status diagnostic endpoint
+app.get('/api/db-status', async (req, res) => {
+  try {
+    const hasDbUrl = !!process.env.DATABASE_URL;
+    if (!hasDbUrl) {
+      return res.json({ connected: false, reason: 'DATABASE_URL environment variable is missing on server.' });
+    }
+    const dbRes = await pool.query('SELECT NOW()');
+    return res.json({ connected: true, timestamp: dbRes.rows[0].now });
+  } catch (err) {
+    return res.json({ connected: false, error: err.message });
+  }
+});
+
 // Auth & Report Routers
 app.use('/api/auth', authRouter);
 app.use('/api/reports', reportsRouter);
