@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useAuth } from './AuthContext';
 
 export default function UploadForm({ onSuccess }) {
+  const { token } = useAuth();
   const [name, setName] = useState('');
   const [age, setAge] = useState('');
   const [sex, setSex] = useState('male');
@@ -23,7 +25,11 @@ export default function UploadForm({ onSuccess }) {
     formData.append('pdf', file);
 
     try {
-      const res = await fetch('/api/analyze', { method: 'POST', body: formData });
+      const headers = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+      const res = await fetch('/api/analyze', { method: 'POST', headers, body: formData });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Analysis failed.');
       onSuccess(data);
@@ -33,6 +39,7 @@ export default function UploadForm({ onSuccess }) {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="card-clean p-4">

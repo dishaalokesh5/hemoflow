@@ -1,4 +1,4 @@
-export default function ResultsView({ data, onReset }) {
+export default function ResultsView({ data, onReset, onBackToDashboard, isLoggedIn }) {
   const { userContext, systemScores, flags, geminiAnalysis } = data;
 
   const getScoreInfo = (val) => {
@@ -38,9 +38,19 @@ export default function ResultsView({ data, onReset }) {
             <span>Status: <strong style={{ color: '#1A1A1A' }}>{userContext.fasting ? 'Fasting' : 'Non-Fasting'}</strong></span>
           </div>
         </div>
-        <button onClick={onReset} className="btn btn-teal btn-sm">
-          Analyze Another Report
-        </button>
+        <div className="d-flex align-items-center gap-2">
+          {isLoggedIn && onBackToDashboard && (
+            <button onClick={onBackToDashboard} className="btn btn-outline-secondary btn-sm d-inline-flex align-items-center gap-1">
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to Dashboard
+            </button>
+          )}
+          <button onClick={onReset} className="btn btn-teal btn-sm">
+            Analyze Another Report
+          </button>
+        </div>
       </div>
 
       {/* System Health Scores */}

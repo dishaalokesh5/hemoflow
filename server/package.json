@@ -8,10 +8,13 @@
   },
   "dependencies": {
     "@google/genai": "latest",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.3",
     "multer": "^1.4.5-lts.1",
-    "pdfjs-dist": "^6.2.108"
+    "pdfjs-dist": "^6.2.108",
+    "pg": "^8.23.0"
   }
 }

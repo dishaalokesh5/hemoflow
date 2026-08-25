@@ -7,14 +7,26 @@ import { parseBiomarkers } from './biomarkerParser.js';
 import { SYSTEM_GROUPS } from './systemGroups.js';
 import { evaluateMarker, scoreSystem } from './rulesEngine.js';
 import { getAnalysis } from './geminiReasoning.js';
+import pool from './db.js';
+import { runMigrations } from './migrate.js';
+import { optionalToken } from './middleware/auth.js';
+import authRouter from './routes/auth.js';
+import reportsRouter from './routes/reports.js';
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Run DB migrations idempotently on startup
+runMigrations();
+
 app.use(cors());
 app.use(express.json());
 
-app.post('/api/analyze', upload.single('pdf'), async (req, res) => {
+// Auth & Report Routers
+app.use('/api/auth', authRouter);
+app.use('/api/reports', reportsRouter);
+
+app.post('/api/analyze', optionalToken, upload.single('pdf'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: "PDF file is required." });
 
@@ -64,7 +76,27 @@ app.post('/api/analyze', upload.single('pdf'), async (req, res) => {
 
     const geminiAnalysis = await getAnalysis(fullPanelJson, userContext);
 
-    res.json({ userContext, systemScores, flags, evaluatedMarkers, geminiAnalysis });
+    const resultPayload = { userContext, systemScores, flags, evaluatedMarkers, geminiAnalysis };
+
+    // Non-blocking persistence: Attempt saving if authenticated, but never fail analysis if DB save fails
+    if (req.user && req.user.id) {
+      try {
+        const originalFilename = req.file.originalname || 'blood_report.pdf';
+        const insertRes = await pool.query(
+          `INSERT INTO reports (user_id, original_filename, status, analysis_data) 
+           VALUES ($1, $2, 'COMPLETED', $3) 
+           RETURNING id`,
+          [req.user.id, originalFilename, JSON.stringify(resultPayload)]
+        );
+        resultPayload.reportId = insertRes.rows[0].id;
+        resultPayload.saved = true;
+      } catch (dbErr) {
+        console.error('Database persistence failed (returning raw analysis result to user):', dbErr.message);
+        resultPayload.saved = false;
+      }
+    }
+
+    res.json(resultPayload);
   } catch (err) {
     res.status(500).json({ error: err.message || "Failed to analyze report." });
   }
@@ -72,3 +104,4 @@ app.post('/api/analyze', upload.single('pdf'), async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Hemoflow backend running on port ${PORT}`));
+
