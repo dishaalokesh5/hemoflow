@@ -3,9 +3,68 @@ import fs from 'fs';
 import path from 'path';
 import pool from '../db.js';
 import { runMigrations } from '../migrate.js';
+import { fork } from 'child_process';
+import { fileURLToPath } from 'url';
 
 // We will run tests against server running on port 5000 (or spawn an instance)
 const BASE_URL = 'http://localhost:5000';
+let spawnedProcess = null;
+
+async function isServerUp() {
+  return new Promise((resolve) => {
+    const req = http.get('http://localhost:5000/', (res) => {
+      resolve(res.statusCode === 200);
+    });
+    req.on('error', () => resolve(false));
+    req.end();
+  });
+}
+
+async function ensureServerRunning() {
+  if (await isServerUp()) {
+    console.log('[TEST SETUP] Server is already running on port 5000.');
+    return;
+  }
+
+  console.log('[TEST SETUP] Server not detected on port 5000. Spawning background server instance...');
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const serverPath = path.resolve(__dirname, '../server.js');
+  
+  spawnedProcess = fork(serverPath, [], { stdio: 'ignore' });
+
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 500));
+    if (await isServerUp()) {
+      console.log('[TEST SETUP] Backend server started successfully.');
+      return;
+    }
+  }
+
+  throw new Error('Failed to start background backend server for test execution.');
+}
+
+async function cleanup() {
+  if (spawnedProcess) {
+    console.log('[TEST TEARDOWN] Stopping auto-spawned backend server...');
+    try {
+      spawnedProcess.kill('SIGTERM');
+    } catch (e) {
+      // ignore process exit error
+    }
+    spawnedProcess = null;
+  }
+}
+
+process.on('SIGINT', async () => {
+  await cleanup();
+  process.exit(1);
+});
+
+process.on('SIGTERM', async () => {
+  await cleanup();
+  process.exit(1);
+});
+
 
 async function makeRequest(options, postData = null) {
   return new Promise((resolve, reject) => {
@@ -36,12 +95,16 @@ async function makeRequest(options, postData = null) {
 async function runTestSuite() {
   console.log('================== HEMOFLOW INTEGRATION TEST SUITE ==================\n');
 
+  // Ensure backend server is accessible
+  await ensureServerRunning();
+
   // 0. Database Migration
   await runMigrations();
 
   // Clean test user data
   await pool.query("DELETE FROM users WHERE email LIKE 'test_%@example.com'");
   console.log('[TEST 0] Cleaned test database users.');
+
 
   // 1. Register User A
   console.log('\n[TEST 1] Register User A');
@@ -212,10 +275,13 @@ async function runTestSuite() {
   await pool.query("DELETE FROM users WHERE email LIKE 'test_%@example.com'");
 
   console.log('\n================ ALL INTEGRATION TESTS PASSED SUCCESSFULLY! ================');
+  await cleanup();
   process.exit(0);
 }
 
-runTestSuite().catch(err => {
+runTestSuite().catch(async (err) => {
   console.error('Test Suite Failed:', err);
+  await cleanup();
   process.exit(1);
 });
+

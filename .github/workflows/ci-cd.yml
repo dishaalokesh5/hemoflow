@@ -1,0 +1,106 @@
+name: Hemoflow Production-Grade CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  client-ci:
+    name: Client CI (Lint & Build Validation)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'client/package-lock.json'
+
+      - name: Install Client Dependencies
+        run: cd client && npm ci
+
+      - name: Code Quality & Lint Verification
+        run: cd client && npm run lint
+
+      - name: Build React Production Bundle
+        run: cd client && npm run build
+
+      - name: Upload Client Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-build-dist
+          path: client/build/
+          retention-days: 7
+
+  server-ci:
+    name: Server CI (Lint, Resilience & Integration Testing)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'server/package-lock.json'
+
+      - name: Install Server Dependencies
+        run: cd server && npm ci
+
+      - name: Code Quality & Syntax Validation
+        run: cd server && npm run lint
+
+      - name: Run Non-Blocking Persistence Resilience Tests (BLOCKING STEP)
+        run: cd server && npm run test:resilience
+
+      - name: Run E2E Integration Test Suite
+        env:
+          PORT: 5000
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'hemoflow_ci_secret_key_prod_grade_9988' }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'ci_mock_gemini_key' }}
+          DATABASE_URL: test_hemoflow.db
+        run: cd server && npm test
+
+  cd-delivery:
+    name: Continuous Delivery & Artifact Packaging
+    needs: [client-ci, server-ci]
+    runs-on: ubuntu-latest
+    # Only execute delivery packaging on pushes to main/master (skip for PRs)
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Client Production Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: client-build-dist
+          path: client/build
+
+      - name: Verify Distribution Asset Integrity
+        run: |
+          echo "Checking built assets..."
+          test -f client/build/index.html || (echo "Missing client index.html" && exit 1)
+          test -f server/server.js || (echo "Missing server entry point" && exit 1)
+          echo "✔ All production assets verified."
+
+      - name: Create Production Release Bundle
+        run: |
+          mkdir -p release-bundle
+          tar -czf release-bundle/client-dist.tar.gz -C client build
+          tar -czf release-bundle/server-dist.tar.gz -C server . --exclude=node_modules
+          echo "✔ Release archives generated successfully."
+
+      - name: Upload Release Bundle Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: hemoflow-release-bundle
+          path: release-bundle/
+          retention-days: 14

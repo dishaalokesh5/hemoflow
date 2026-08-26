@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "lint": "node --check server.js && node --check biomarkerParser.js && node --check rulesEngine.js",
     "test": "node tests/test_suite.js",
     "test:resilience": "node tests/test_db_resilience.js"
   },

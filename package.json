@@ -1,0 +1,24 @@
+{
+  "name": "hemoflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hemoflow — Deterministic Blood Report Analysis & AI Reasoning Platform",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "install:server": "cd server && npm install",
+    "install:client": "cd client && npm install",
+    "install:all": "npm run install:server && npm run install:client",
+    "lint:server": "cd server && npm run lint",
+    "lint:client": "cd client && npm run lint",
+    "lint": "npm run lint:server && npm run lint:client",
+    "test:server": "cd server && npm test",
+    "test:resilience": "cd server && npm run test:resilience",
+    "test:all": "npm run test:resilience && npm run test:server",
+    "build:client": "cd client && npm run build",
+    "build": "npm run build:client",
+    "start:server": "cd server && npm start",
+    "start:client": "cd client && npm start"
+  }
+}
