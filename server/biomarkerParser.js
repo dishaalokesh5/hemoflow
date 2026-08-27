@@ -6,15 +6,24 @@ const FOOTNOTE_PATTERNS = [
   /^associated tests:/i,
   /reference interval as per/i,
   /^\*\*/,
-  /^interpretation:/i,
-  /^references:/i,
-  /^deficiency:/i,
-  /^normal:/i,
-  /^\d+\.\s/
+  /^interpretation\b/i,
+  /^references\b/i,
+  /^deficiency\b/i,
+  /^bullet\b/i,
+  /^•/,
+  /^\d+\.\s/,
+  /clinical correlation/i,
+  /parathyroid/i,
+  /tietz textbook/i,
+  /roche kit insert/i
 ];
 
-function isFootnoteLine(line) {
-  return FOOTNOTE_PATTERNS.some(p => p.test(line.trim()));
+const GENERIC_PREFIXES = ['serum', 'total', 'direct', 'indirect', 'blood', 'count'];
+
+function isInterpretationOrFootnoteLine(line) {
+  const trimmed = line.trim();
+  if (trimmed.startsWith('•')) return true;
+  return FOOTNOTE_PATTERNS.some(p => p.test(trimmed));
 }
 
 function escapeRegex(str) {
@@ -22,6 +31,11 @@ function escapeRegex(str) {
 }
 
 function fuzzyMatchLabel(normalizedLine, alias, canonicalKey) {
+  // Prevent matching plain word 'type' inside interpretation text for rh_type
+  if (canonicalKey === 'rh_type') {
+    if (!/\brh\b/i.test(normalizedLine)) return false;
+  }
+
   // Strict check for MCH vs MCHC
   if (canonicalKey === 'mch') {
     if (/\bmchc\b/i.test(normalizedLine) || /concentration/i.test(normalizedLine)) {
@@ -35,6 +49,13 @@ function fuzzyMatchLabel(normalizedLine, alias, canonicalKey) {
     }
   }
 
+  // Strict check for Vitamin B12
+  if (canonicalKey === 'vitamin_b12') {
+    if (!/\b(b12|vit\s*b12|cobalamin)\b/i.test(normalizedLine)) {
+      return false;
+    }
+  }
+
   // Prevent Vitamin D from matching unrelated lines
   if (canonicalKey === 'vitamin_d') {
     if (!/vitamin\s*d|vit\s*d|25\s*hydroxy/i.test(normalizedLine)) {
@@ -42,17 +63,19 @@ function fuzzyMatchLabel(normalizedLine, alias, canonicalKey) {
     }
   }
 
-  const aliasWords = alias.split(" ").filter(w => w.length > 2);
-  if (aliasWords.length === 0) {
+  const allWords = alias.split(" ").filter(w => w.length >= 2);
+  const keyWords = allWords.filter(w => !GENERIC_PREFIXES.includes(w));
+  const wordsToMatch = keyWords.length > 0 ? keyWords : allWords;
+
+  if (wordsToMatch.length === 0) {
     return new RegExp(`\\b${escapeRegex(alias)}\\b`, 'i').test(normalizedLine);
   }
 
-  // Exact word boundary regex check
-  const matchedWords = aliasWords.filter(w =>
+  const matchedWords = wordsToMatch.filter(w =>
     new RegExp(`\\b${escapeRegex(w)}\\b`, 'i').test(normalizedLine)
   );
 
-  return matchedWords.length / aliasWords.length >= 0.7;
+  return matchedWords.length === wordsToMatch.length;
 }
 
 function extractQualitativeValue(text, canonicalKey) {
@@ -85,7 +108,6 @@ export function parseBiomarkers(rawText) {
   for (let i = 0; i < Math.min(lines.length, 30); i++) {
     const l = lines[i];
     
-    // Strict Age matching (require 'Years' or 'Yrs')
     const ageMatch = l.match(/\bAge\s*[:\-]?\s*(\d{1,3})\s*(Years|Yrs|Y)\b/i);
     if (ageMatch && !extractedAge) {
       extractedAge = parseInt(ageMatch[1], 10);
@@ -101,7 +123,7 @@ export function parseBiomarkers(rawText) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    if (isFootnoteLine(line)) continue;
+    if (isInterpretationOrFootnoteLine(line)) continue;
 
     const normalizedLine = normalize(line);
 
@@ -119,7 +141,6 @@ export function parseBiomarkers(rawText) {
 
     if (candidates.length === 0) continue;
 
-    // Pick best match (longest alias first)
     candidates.sort((a, b) => b.length - a.length);
     const bestMatch = candidates[0];
     const canonicalKey = bestMatch.canonicalKey;
@@ -146,7 +167,7 @@ export function parseBiomarkers(rawText) {
       if (value === null) {
         for (let j = i + 1; j <= i + 8 && j < lines.length; j++) {
           const scanLine = lines[j];
-          if (isFootnoteLine(scanLine)) break;
+          if (isInterpretationOrFootnoteLine(scanLine)) break;
 
           const normalizedScanLine = normalize(scanLine);
           const isDifferentLabel = Object.entries(BIOMARKER_ALIASES).some(([otherKey, aliases]) => {
@@ -181,14 +202,17 @@ export function parseBiomarkers(rawText) {
       // Clean out parenthetical test titles (e.g. "(25-Hydroxy Vit D)", "(HbA1c)", "(SAP)")
       lineTextAfterLabel = lineTextAfterLabel.replace(/\([^)]*\)/g, '');
 
-      // Remove reference range pattern if present on same line
-      const sameLineRangeMatch = lineTextAfterLabel.match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/);
-      if (sameLineRangeMatch) {
-        lineTextAfterLabel = lineTextAfterLabel.replace(sameLineRangeMatch[0], '');
-      }
+      // Remove explicit reference range labels & numerical range patterns
+      lineTextAfterLabel = lineTextAfterLabel
+        .replace(/(?:Normal|Deficiency|Prediabetes|Diabetic|Optimal|Borderline|High Risk)\s*[:\-]?\s*(?:>=|<=|<|>)?\s*\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?/gi, '')
+        .replace(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/g, '');
 
-      // Remove scientific exponent patterns and accreditation codes
-      lineTextAfterLabel = lineTextAfterLabel.replace(/10\^\d+/g, '').replace(/MC-\d+/g, '');
+      // Remove scientific exponent patterns, accreditation codes, method strings, and alias names
+      lineTextAfterLabel = lineTextAfterLabel
+        .replace(/10\^\d+/g, '')
+        .replace(/MC-\d+/g, '')
+        .replace(/Gen\d+/gi, '')
+        .replace(/hba1c/i, '');
 
       const sameLineNumMatch = lineTextAfterLabel.match(/(\d+(?:\.\d+)?)/);
       if (sameLineNumMatch) {
@@ -199,7 +223,7 @@ export function parseBiomarkers(rawText) {
       if (value === null) {
         for (let j = i + 1; j <= i + 8 && j < lines.length; j++) {
           const scanLine = lines[j];
-          if (isFootnoteLine(scanLine)) break;
+          if (isInterpretationOrFootnoteLine(scanLine)) break;
 
           const normalizedScanLine = normalize(scanLine);
 
@@ -215,15 +239,19 @@ export function parseBiomarkers(rawText) {
 
           debugLines.push(scanLine);
 
-          // Skip lines containing explicit reference headers or footnote numbering
-          if (!/Normal:|Deficiency:|Page\s+\d+|Interpretation/i.test(scanLine) && !/^\d+\.\s/.test(scanLine.trim())) {
-            // Clean out MC-10068 accreditation codes if present
-            const cleanScanLine = scanLine.replace(/MC-\d+/g, '').replace(/\([^)]*\)/g, '');
-            const numMatch = cleanScanLine.match(/(\d+(?:\.\d+)?)/);
-            if (numMatch) {
-              value = parseFloat(numMatch[1]);
-              break;
-            }
+          // Clean reference ranges, accreditation codes, method names, and parenthetical text
+          let cleanScanLine = scanLine
+            .replace(/(?:Normal|Deficiency|Prediabetes|Diabetic|Optimal|Borderline|High Risk)\s*[:\-]?\s*(?:>=|<=|<|>)?\s*\d+(?:\.\d+)?(?:\s*-\s*\d+(?:\.\d+)?)?/gi, '')
+            .replace(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/g, '')
+            .replace(/MC-\d+/g, '')
+            .replace(/\([^)]*\)/g, '')
+            .replace(/Gen\d+/gi, '')
+            .replace(/hba1c/i, '');
+
+          const numMatch = cleanScanLine.match(/(\d+(?:\.\d+)?)/);
+          if (numMatch) {
+            value = parseFloat(numMatch[1]);
+            break;
           }
         }
       }
