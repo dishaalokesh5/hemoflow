@@ -7,7 +7,8 @@
     "start": "node server.js",
     "lint": "node --check server.js && node --check biomarkerParser.js && node --check rulesEngine.js",
     "test": "node tests/test_suite.js",
-    "test:resilience": "node tests/test_db_resilience.js"
+    "test:resilience": "node tests/test_db_resilience.js",
+    "parse": "node parse_pdf_cli.js"
   },
   "dependencies": {
     "@google/genai": "latest",

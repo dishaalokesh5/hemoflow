@@ -59,6 +59,14 @@ app.post('/api/analyze', optionalToken, upload.single('pdf'), async (req, res) =
     const rawText = await extractText(req.file.buffer);
     const parsedBiomarkers = parseBiomarkers(rawText);
 
+    // Override or populate patient metadata from PDF header if missing
+    if ((!userContext.age || isNaN(userContext.age)) && parsedBiomarkers.patientMeta?.age) {
+      userContext.age = parsedBiomarkers.patientMeta.age;
+    }
+    if ((userContext.sex === 'Not specified' || !userContext.sex) && parsedBiomarkers.patientMeta?.sex) {
+      userContext.sex = parsedBiomarkers.patientMeta.sex;
+    }
+
     const evaluatedMarkers = parsedBiomarkers.map(bm => {
       if (typeof bm.value === 'string') {
         return {
@@ -69,19 +77,20 @@ app.post('/api/analyze', optionalToken, upload.single('pdf'), async (req, res) =
         };
       }
 
-      const hasExtractedRange = (bm.referenceLow !== null && bm.referenceLow !== undefined && bm.referenceHigh !== null && bm.referenceHigh !== undefined);
-      const range = hasExtractedRange ? { low: bm.referenceLow, high: bm.referenceHigh } : null;
+      const low = bm.referenceLow !== undefined ? bm.referenceLow : null;
+      const high = bm.referenceHigh !== undefined ? bm.referenceHigh : null;
+      const range = { low: low ?? 'N/A', high: high ?? 'N/A' };
 
-      if (bm.value === null || !hasExtractedRange) {
+      if (bm.value === null || (low === null && high === null)) {
         return {
           ...bm,
-          range: range || { low: null, high: null },
+          range,
           status: 'NEEDS_REVIEW',
           deviationPct: 0
         };
       }
 
-      const evalRes = evaluateMarker(bm.value, range.low, range.high);
+      const evalRes = evaluateMarker(bm.value, low, high);
       return { ...bm, range, ...evalRes };
     });
 
@@ -90,7 +99,7 @@ app.post('/api/analyze', optionalToken, upload.single('pdf'), async (req, res) =
       systemScores[system] = scoreSystem(keys, evaluatedMarkers);
     }
 
-    const flags = evaluatedMarkers.filter(m => m.status !== 'PASS');
+    const flags = evaluatedMarkers.filter(m => m.status !== 'PASS' && m.status !== 'NEEDS_REVIEW');
     const fullPanelJson = { markers: evaluatedMarkers, systemScores };
 
     const geminiAnalysis = await getAnalysis(fullPanelJson, userContext);

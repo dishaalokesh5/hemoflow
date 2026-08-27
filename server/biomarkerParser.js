@@ -6,6 +6,11 @@ const FOOTNOTE_PATTERNS = [
   /^associated tests:/i,
   /reference interval as per/i,
   /^\*\*/,
+  /^interpretation:/i,
+  /^references:/i,
+  /^deficiency:/i,
+  /^normal:/i,
+  /^\d+\.\s/
 ];
 
 function isFootnoteLine(line) {
@@ -16,14 +21,37 @@ function escapeRegex(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function fuzzyMatchLabel(normalizedLine, alias) {
+function fuzzyMatchLabel(normalizedLine, alias, canonicalKey) {
+  // Strict check for MCH vs MCHC
+  if (canonicalKey === 'mch') {
+    if (/\bmchc\b/i.test(normalizedLine) || /concentration/i.test(normalizedLine)) {
+      return false;
+    }
+  }
+
+  if (canonicalKey === 'mchc') {
+    if (!/\bmchc\b/i.test(normalizedLine) && !/concentration/i.test(normalizedLine)) {
+      return false;
+    }
+  }
+
+  // Prevent Vitamin D from matching unrelated lines
+  if (canonicalKey === 'vitamin_d') {
+    if (!/vitamin\s*d|vit\s*d|25\s*hydroxy/i.test(normalizedLine)) {
+      return false;
+    }
+  }
+
   const aliasWords = alias.split(" ").filter(w => w.length > 2);
   if (aliasWords.length === 0) {
     return new RegExp(`\\b${escapeRegex(alias)}\\b`, 'i').test(normalizedLine);
   }
+
+  // Exact word boundary regex check
   const matchedWords = aliasWords.filter(w =>
     new RegExp(`\\b${escapeRegex(w)}\\b`, 'i').test(normalizedLine)
   );
+
   return matchedWords.length / aliasWords.length >= 0.7;
 }
 
@@ -51,21 +79,39 @@ export function parseBiomarkers(rawText) {
   const foundKeys = new Set();
   const QUALITATIVE_KEYS = ['blood_group', 'rh_type'];
 
+  // Extract patient metadata (Age, Gender) from PDF header
+  let extractedAge = null;
+  let extractedSex = null;
+  for (let i = 0; i < Math.min(lines.length, 30); i++) {
+    const l = lines[i];
+    
+    // Strict Age matching (require 'Years' or 'Yrs')
+    const ageMatch = l.match(/\bAge\s*[:\-]?\s*(\d{1,3})\s*(Years|Yrs|Y)\b/i);
+    if (ageMatch && !extractedAge) {
+      extractedAge = parseInt(ageMatch[1], 10);
+    }
+    
+    const sexMatch = l.match(/(?:Gender|Sex)\s*[:\-]?\s*(Female|Male|F|M)\b/i);
+    if (sexMatch && sexMatch[1] && !extractedSex) {
+      const s = sexMatch[1].toLowerCase();
+      extractedSex = s.startsWith('f') ? 'female' : 'male';
+    }
+  }
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Skip footnote / reference interval lines entirely before label matching
     if (isFootnoteLine(line)) continue;
 
     const normalizedLine = normalize(line);
 
-    // Fuzzy match line against all biomarker aliases using word-boundary regex
+    // Candidate label matching
     const candidates = [];
     for (const [canonicalKey, aliases] of Object.entries(BIOMARKER_ALIASES)) {
       if (foundKeys.has(canonicalKey)) continue;
       for (const alias of aliases) {
         const normAlias = normalize(alias);
-        if (fuzzyMatchLabel(normalizedLine, normAlias)) {
+        if (fuzzyMatchLabel(normalizedLine, normAlias, canonicalKey)) {
           candidates.push({ canonicalKey, normAlias, length: normAlias.length });
         }
       }
@@ -73,7 +119,7 @@ export function parseBiomarkers(rawText) {
 
     if (candidates.length === 0) continue;
 
-    // Pick best match (longest normalized alias first to preserve collision handling)
+    // Pick best match (longest alias first)
     candidates.sort((a, b) => b.length - a.length);
     const bestMatch = candidates[0];
     const canonicalKey = bestMatch.canonicalKey;
@@ -89,7 +135,6 @@ export function parseBiomarkers(rawText) {
       low = 'N/A';
       high = 'N/A';
 
-      // 1. Try extracting qualitative value from the SAME line first (after label)
       let lineTextAfterLabel = line;
       const labelIdx = normalizedLine.indexOf(matchedLabel);
       if (labelIdx !== -1) {
@@ -98,7 +143,6 @@ export function parseBiomarkers(rawText) {
 
       value = extractQualitativeValue(lineTextAfterLabel, canonicalKey);
 
-      // 2. If not found on same line, scan up to 8 forward lines below
       if (value === null) {
         for (let j = i + 1; j <= i + 8 && j < lines.length; j++) {
           const scanLine = lines[j];
@@ -107,7 +151,7 @@ export function parseBiomarkers(rawText) {
           const normalizedScanLine = normalize(scanLine);
           const isDifferentLabel = Object.entries(BIOMARKER_ALIASES).some(([otherKey, aliases]) => {
             if (otherKey === canonicalKey) return false;
-            return aliases.some(alias => fuzzyMatchLabel(normalizedScanLine, normalize(alias)));
+            return aliases.some(alias => fuzzyMatchLabel(normalizedScanLine, normalize(alias), otherKey));
           });
           if (isDifferentLabel) break;
 
@@ -117,7 +161,7 @@ export function parseBiomarkers(rawText) {
         }
       }
     } else {
-      // Try regex range extraction FIRST for quantitative fields; fall back to REFERENCE_RANGES if regex finds no "X - Y" pattern
+      // Range extraction from line or reference defaults
       const rangeMatch = line.match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/);
       if (rangeMatch) {
         low = parseFloat(rangeMatch[1]);
@@ -127,59 +171,65 @@ export function parseBiomarkers(rawText) {
         high = REFERENCE_RANGES[canonicalKey].high;
       }
 
-      // Forward-scan up to 8 lines for quantitative numeric result
-      for (let j = i + 1; j <= i + 8 && j < lines.length; j++) {
-        const scanLine = lines[j];
-        if (isFootnoteLine(scanLine)) break;
-
-        const normalizedScanLine = normalize(scanLine);
-
-        // Boundary check: Check if scan line matches ANY alias of ANY OTHER biomarker
-        const isDifferentLabel = Object.entries(BIOMARKER_ALIASES).some(([otherKey, aliases]) => {
-          if (otherKey === canonicalKey) return false;
-          return aliases.some(alias => {
-            const normOtherAlias = normalize(alias);
-            return fuzzyMatchLabel(normalizedScanLine, normOtherAlias);
-          });
-        });
-
-        if (isDifferentLabel) {
-          break; // Stop forward-scan immediately at next field boundary
-        }
-
-        debugLines.push(scanLine);
-
-        // Widen isolated-value line pattern to match bare number OR number + unit fragment
-        const isolatedNumMatch = scanLine.match(/^(\d+(?:\.\d+)?)\s*[a-zA-Z/%µ^0-9]*\s*$/);
-        if (isolatedNumMatch) {
-          value = parseFloat(isolatedNumMatch[1]);
-          break;
-        }
+      // 1. PRIORITIZE SAME-LINE VALUE EXTRACTION FIRST
+      let lineTextAfterLabel = line;
+      const labelIdx = normalizedLine.indexOf(matchedLabel);
+      if (labelIdx !== -1) {
+        lineTextAfterLabel = line.slice(labelIdx + matchedLabel.length);
       }
 
-      // Fallback: If no isolated numeric line below within scan window, check same line after label
+      // Clean out parenthetical test titles (e.g. "(25-Hydroxy Vit D)", "(HbA1c)", "(SAP)")
+      lineTextAfterLabel = lineTextAfterLabel.replace(/\([^)]*\)/g, '');
+
+      // Remove reference range pattern if present on same line
+      const sameLineRangeMatch = lineTextAfterLabel.match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/);
+      if (sameLineRangeMatch) {
+        lineTextAfterLabel = lineTextAfterLabel.replace(sameLineRangeMatch[0], '');
+      }
+
+      // Remove scientific exponent patterns and accreditation codes
+      lineTextAfterLabel = lineTextAfterLabel.replace(/10\^\d+/g, '').replace(/MC-\d+/g, '');
+
+      const sameLineNumMatch = lineTextAfterLabel.match(/(\d+(?:\.\d+)?)/);
+      if (sameLineNumMatch) {
+        value = parseFloat(sameLineNumMatch[1]);
+      }
+
+      // 2. FALL BACK TO MULTI-LINE FORWARD SCAN ONLY IF NO VALUE FOUND ON SAME LINE
       if (value === null) {
-        let lineTextAfterLabel = line;
-        const labelIdx = normalizedLine.indexOf(matchedLabel);
-        if (labelIdx !== -1) {
-          lineTextAfterLabel = line.slice(labelIdx + matchedLabel.length);
-        }
+        for (let j = i + 1; j <= i + 8 && j < lines.length; j++) {
+          const scanLine = lines[j];
+          if (isFootnoteLine(scanLine)) break;
 
-        const sameLineRangeMatch = lineTextAfterLabel.match(/(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)/);
-        if (sameLineRangeMatch) {
-          lineTextAfterLabel = lineTextAfterLabel.replace(sameLineRangeMatch[0], '');
-        }
+          const normalizedScanLine = normalize(scanLine);
 
-        lineTextAfterLabel = lineTextAfterLabel.replace(/10\^\d+/g, '');
+          const isDifferentLabel = Object.entries(BIOMARKER_ALIASES).some(([otherKey, aliases]) => {
+            if (otherKey === canonicalKey) return false;
+            return aliases.some(alias => {
+              const normOtherAlias = normalize(alias);
+              return fuzzyMatchLabel(normalizedScanLine, normOtherAlias, otherKey);
+            });
+          });
 
-        const sameLineNumMatch = lineTextAfterLabel.match(/(\d+(?:\.\d+)?)/);
-        if (sameLineNumMatch) {
-          value = parseFloat(sameLineNumMatch[1]);
+          if (isDifferentLabel) break;
+
+          debugLines.push(scanLine);
+
+          // Skip lines containing explicit reference headers or footnote numbering
+          if (!/Normal:|Deficiency:|Page\s+\d+|Interpretation/i.test(scanLine) && !/^\d+\.\s/.test(scanLine.trim())) {
+            // Clean out MC-10068 accreditation codes if present
+            const cleanScanLine = scanLine.replace(/MC-\d+/g, '').replace(/\([^)]*\)/g, '');
+            const numMatch = cleanScanLine.match(/(\d+(?:\.\d+)?)/);
+            if (numMatch) {
+              value = parseFloat(numMatch[1]);
+              break;
+            }
+          }
         }
       }
     }
 
-    const isMissingRange = (low === null || high === null);
+    const isMissingRange = (low === null && high === null);
     const status = (value === null || (!isQualitative && isMissingRange)) ? "NEEDS_REVIEW" : (isQualitative ? "PASS" : "EXTRACTED");
 
     results.push({
@@ -194,19 +244,8 @@ export function parseBiomarkers(rawText) {
     foundKeys.add(canonicalKey);
   }
 
-  // DEBUG LOGGING: Active when DEBUG_PARSING=true
-  if (process.env.DEBUG_PARSING === 'true' || process.env.DEBUG_PARSING === '1') {
-    console.log('\n=================== DEBUG PARSER OUTPUT ===================');
-    for (const res of results) {
-      console.log(`\n[BIOMARKER: ${res.name.toUpperCase()}]`);
-      console.log(`Status: ${res.status}`);
-      console.log(`Extracted Value: ${res.value !== null ? res.value : 'NULL'}`);
-      console.log(`Extracted Range: ${res.referenceLow !== null ? res.referenceLow : 'NULL'} - ${res.referenceHigh !== null ? res.referenceHigh : 'NULL'}`);
-      console.log('Scanned Lines:');
-      res.debugLines.forEach((l, idx) => console.log(`  Line ${idx + 1}: "${l}"`));
-    }
-    console.log('\n===========================================================\n');
-  }
+  // Attach extracted patient metadata
+  results.patientMeta = { age: extractedAge, sex: extractedSex };
 
   return results;
 }

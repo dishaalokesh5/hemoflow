@@ -16,6 +16,7 @@
     "test:server": "cd server && npm test",
     "test:resilience": "cd server && npm run test:resilience",
     "test:all": "npm run test:resilience && npm run test:server",
+    "parse": "node server/parse_pdf_cli.js",
     "build:client": "cd client && npm run build",
     "build": "npm run build:client",
     "start:server": "cd server && npm start",
