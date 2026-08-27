@@ -1,8 +1,37 @@
 import express from 'express';
 import pool from '../db.js';
-import { verifyToken } from '../middleware/auth.js';
+import { verifyToken, optionalToken } from '../middleware/auth.js';
+import { sendReportEmail } from '../emailService.js';
 
 const router = express.Router();
+
+// POST send report via email
+router.post('/email', optionalToken, async (req, res) => {
+  try {
+    const { toEmail, reportData } = req.body;
+    if (!toEmail) {
+      return res.status(400).json({ error: 'Target email address is required.' });
+    }
+    if (!reportData) {
+      return res.status(400).json({ error: 'Report data payload is required.' });
+    }
+
+    const emailRes = await sendReportEmail({
+      toEmail,
+      patientName: reportData.userContext?.name,
+      reportData
+    });
+
+    return res.json({
+      message: `Analysis report sent successfully to ${toEmail}!`,
+      previewUrl: emailRes.previewUrl || null
+    });
+  } catch (err) {
+    console.error('Email report error:', err);
+    return res.status(500).json({ error: 'Failed to send email report: ' + err.message });
+  }
+});
+
 
 // GET all reports for the authenticated user (metadata list sorted newest first)
 router.get('/', verifyToken, async (req, res) => {
