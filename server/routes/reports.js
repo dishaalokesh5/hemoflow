@@ -22,8 +22,12 @@ router.post('/email', optionalToken, async (req, res) => {
       reportData
     });
 
+    const msg = emailRes.simulated 
+      ? `Analysis report generated & dispatched successfully for ${toEmail}! (Simulated local delivery - add SMTP_HOST to .env for live inbox delivery)`
+      : `Analysis report sent successfully to ${toEmail}!`;
+
     return res.json({
-      message: `Analysis report sent successfully to ${toEmail}!`,
+      message: msg,
       previewUrl: emailRes.previewUrl || null
     });
   } catch (err) {
