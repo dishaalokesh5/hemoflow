@@ -1,16 +1,5 @@
-import { useState } from 'react';
-import { API_BASE } from './apiConfig';
-import { useAuth } from './AuthContext';
-
 export default function ResultsView({ data, onReset, onBackToDashboard, isLoggedIn }) {
   const { userContext, systemScores, flags, geminiAnalysis } = data;
-  const { user } = useAuth() || {};
-
-  const [showEmailModal, setShowEmailModal] = useState(false);
-  const [targetEmail, setTargetEmail] = useState(user?.email || '');
-  const [emailStatus, setEmailStatus] = useState('idle'); // idle | sending | success | error
-  const [emailMessage, setEmailMessage] = useState('');
-  const [previewUrl, setPreviewUrl] = useState(null);
 
   const getScoreInfo = (val) => {
     let score = val;
@@ -37,37 +26,6 @@ export default function ResultsView({ data, onReset, onBackToDashboard, isLogged
     return 'text-status-warn';
   };
 
-  const handleSendEmail = async (e) => {
-    e.preventDefault();
-    if (!targetEmail) return;
-
-    setEmailStatus('sending');
-    setEmailMessage('');
-    setPreviewUrl(null);
-
-    try {
-      const token = localStorage.getItem('hemoflow_token');
-      const res = await fetch(`${API_BASE}/api/reports/email`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({ toEmail: targetEmail, reportData: data })
-      });
-
-      const resData = await res.json();
-      if (!res.ok) throw new Error(resData.error || 'Failed to send email report.');
-
-      setEmailStatus('success');
-      setEmailMessage(resData.message);
-      if (resData.previewUrl) setPreviewUrl(resData.previewUrl);
-    } catch (err) {
-      setEmailStatus('error');
-      setEmailMessage(err.message);
-    }
-  };
-
   return (
     <div className="d-flex flex-column gap-4">
       {/* Patient Header Card */}
@@ -89,62 +47,11 @@ export default function ResultsView({ data, onReset, onBackToDashboard, isLogged
               Back to Dashboard
             </button>
           )}
-          <button 
-            onClick={() => { setShowEmailModal(true); setTargetEmail(user?.email || ''); }}
-            className="btn btn-outline-teal btn-sm d-inline-flex align-items-center gap-1"
-          >
-            ✉️ Email Report
-          </button>
           <button onClick={onReset} className="btn btn-teal btn-sm">
             Analyze Another Report
           </button>
         </div>
       </div>
-
-      {/* Email Report Modal / Inline Banner */}
-      {showEmailModal && (
-        <div className="card-clean p-4 border-teal animate-fade-in" style={{ backgroundColor: '#F4FBFB', borderLeft: '4px solid #1B6E6E' }}>
-          <div className="d-flex align-items-center justify-content-between mb-2">
-            <h4 className="h6 fw-bold m-0" style={{ color: '#1B6E6E' }}>✉️ Email Blood Analysis Report</h4>
-            <button onClick={() => setShowEmailModal(false)} className="btn-close btn-sm" aria-label="Close"></button>
-          </div>
-          <p className="small text-muted-warm mb-3">
-            Send a formatted HTML summary of this blood panel, system scores, and AI reasoning directly to an email address.
-          </p>
-
-          <form onSubmit={handleSendEmail} className="d-flex flex-column flex-sm-row gap-2 align-items-stretch">
-            <input
-              type="email"
-              required
-              className="form-control form-control-sm flex-grow-1"
-              placeholder="Enter target email address..."
-              value={targetEmail}
-              onChange={(e) => setTargetEmail(e.target.value)}
-              disabled={emailStatus === 'sending'}
-            />
-            <button 
-              type="submit" 
-              className="btn btn-teal btn-sm text-nowrap"
-              disabled={emailStatus === 'sending'}
-            >
-              {emailStatus === 'sending' ? 'Sending Mail...' : 'Send Report Email'}
-            </button>
-          </form>
-
-          {emailMessage && (
-            <div className={`mt-3 small p-2.5 rounded ${emailStatus === 'success' ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle'}`}>
-              <div>{emailMessage}</div>
-              {previewUrl && (
-                <div className="mt-1">
-                  <a href={previewUrl} target="_blank" rel="noreferrer" className="fw-bold text-decoration-underline" style={{ color: '#0D9488' }}>
-                    🔗 Click here to preview Ethereal test email output
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* System Health Scores */}
       <div className="card-clean p-4">
